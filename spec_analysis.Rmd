@@ -1,0 +1,159 @@
+---
+title: "Ganzfeld specification curve analysis"
+author: "AL Pooley"
+date: "2024-08-28"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+# SCA 1 - z-score and binary hit rate 
+
+```{r}
+# Loading data and packages
+library(specr)
+library(tidyverse)
+library(readxl)
+library(psych)
+library(ggplot2)
+library(stats)
+library(dplyr)
+library(furrr)
+
+precog <- read_excel("C:/Users/apooley/OneDrive - University of Edinburgh/Precognition studies/Precognition study series 2022 - 2024/[Golden copy - ALP] KPU 1074.xlsx")
+
+head(precog)
+precog$Gender <- ifelse(precog$Gender == "Female", "female",
+                 ifelse(precog$Gender == "Male", "male", "other"))
+precog$mental_discipline <- as.factor(precog$mental_discipline)
+precog$HIT <- as.factor(precog$HIT)
+precog$HIT_rank <- as.factor(precog$HIT_rank)
+
+# create new subsets: mental discipline and para belief
+
+precog <- precog %>%
+  mutate(
+    para_belief = case_when(
+      ASGS_score <= mean(ASGS_score, na.rm = TRUE) ~ "skeptical",
+      ASGS_score > mean(ASGS_score, na.rm = TRUE) ~ "believer",
+      TRUE ~ NA_character_
+    ),
+    mental_freq = case_when(
+      PIQ_mental_disc_freq <= 3 ~ "regular",
+      PIQ_mental_disc_freq > 3 ~ "infrequent",
+      TRUE ~ NA_character_
+    )
+  )
+```
+
+
+```{r}
+# SCA 1 - Defining analytical choices
+
+# create model for binary y variables (HIT)
+log_glm <- function(formula, data) {
+  glm(formula, data, family = binomial())
+}
+
+specs <- setup(data = precog,
+                     y = c("z_score", "HIT"),
+                     x = c("CAch_GENERAL", "WC","Analytic", "Authentic", "Tone", "Clout", "RIBS_score", "CAct_GENERAL"),
+                     model = c("lm", "log_glm"),
+                     controls = c("Gender", "Age"),
+                     subsets = list(mental_freq = unique(precog$mental_freq), 
+                                    para_belief = unique(precog$para_belief)
+                                    ),
+               simplify = FALSE
+               )
+# 2048 specifications
+specs %>%
+  as_tibble()
+
+```
+
+```{r}
+# remove nonsensical models
+specs$specs <- specs$specs %>%
+  filter(!(model == "log_glm" & y != "HIT")) %>%
+  filter(!(model == "lm" & y != "z_score"))
+
+# 1024 specifications
+
+# examine the filtered specifications
+summary(specs)
+
+plot(specs, circular = T)
+```
+
+
+```{r}
+# run analysis and visualise
+
+# run analysis
+results <- specr(specs)
+
+plot(results, ci = TRUE, ribbon= TRUE)
+plot(results, type = "boxplot")
+plot(results, type = "variance")
+
+# other plotting
+plot(results, type = "curve") + labs(x = "Specifications (ranked)")
+plot(results, type = "choices") + labs(x = "Specification number (ranked)")
+plot(results, choices = c("x","subsets"))
+plot(results, type = "samplesizes")
+```
+```{r}
+## summary
+
+summary(results)
+
+# median ES is 0
+# sample sizes ranged from 21 to 239, with a median of 83
+
+
+```
+
+# SCA 2 - z-scores only 
+
+```{r}
+# same data, only one y variable and model choice 
+#inference function for later
+tidy_full <- function(x) {
+  fit <- broom::tidy(x, conf.int = TRUE)
+  fit$res <- list(x)  # Store model object
+  return(fit)
+}
+
+specs2 <- setup(data = precog,
+                     y = c("z_score"),
+                     x = c("CAch_GENERAL", "WC","Analytic", "Authentic", "Tone", "Clout", "RIBS_score", "CAct_GENERAL"),
+                     model = c("lm"),
+                     controls = c("Gender", "Age"),
+                     subsets = list(mental_freq = unique(precog$mental_freq), 
+                                    para_belief = unique(precog$para_belief)
+                                    ),
+                    fun1 = tidy_full
+               )
+
+summary(specs2) #512 specifications
+
+plot(specs2, circular = T)
+
+results2 <- specr(specs2)
+plot(results2)
+summary(results2) # mean ES of 0
+
+plot(results2, type = "boxplot") # RIBS score has most variability
+plot(results2, type = "variance") # predictors have most variance in model outputs 
+
+plot(results2, type = "curve", group = x, desc = TRUE) + # change type to x,y,subsets,model to see in detail
+  scale_color_brewer(palette = "Dark2") +
+  theme_grey() +
+  theme(legend.position = "none")
+
+# other plotting
+plot(results2, type = "choices")
+plot(results2, choices = c("x", "subsets"))
+plot(results2, type = "samplesizes")
+plot(results2, var = fit_adj.r.squared)
+```
+
