@@ -19,7 +19,7 @@ library(stats)
 library(dplyr)
 library(furrr)
 
-precog <- read_excel("C:/Users/apooley/OneDrive - University of Edinburgh/Precognition studies/Precognition study series 2022 - 2024/[Golden copy - ALP] KPU 1074.xlsx")
+precog <- read_excel("KPU1074.xlsx")
 
 head(precog)
 precog$Gender <- ifelse(precog$Gender == "Female", "female",
